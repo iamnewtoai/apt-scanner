@@ -7,9 +7,9 @@ import requests
 from bs4 import BeautifulSoup
 import streamlit as st
 
-# ----------------- CONFIG & RETRO CRT THEME -----------------
+# ----------------- CONFIGURATION & CRT THEME -----------------
 st.set_page_config(
-    page_title="CRT Cyber Squad | Threat Model & Hardening Console",
+    page_title="CRT Cyber Squad | Enterprise Vulnerability Auditor",
     page_icon="🤖",
     layout="wide"
 )
@@ -19,389 +19,404 @@ st.markdown("""
     @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Bungee&display=swap');
 
     .stApp {
-        background-color: #f3efe6;
+        background-color: #f4f1ea;
         color: #1a1a1a;
         font-family: 'Share Tech Mono', monospace;
     }
 
+    /* 2x2 Agent Grid */
     .agent-grid {
         display: grid;
         grid-template-columns: repeat(2, 1fr);
-        gap: 14px;
-        margin-bottom: 20px;
+        gap: 16px;
+        margin-bottom: 24px;
     }
-    .agent-cell {
+    .agent-card {
         background-color: #ffffff;
         border: 3px solid #222;
-        border-radius: 10px;
+        border-radius: 8px;
         padding: 14px;
-        box-shadow: 5px 5px 0px #111;
+        box-shadow: 4px 4px 0px #000;
     }
-    .agent-header {
-        font-family: 'Bungee', cursive, monospace;
-        font-size: 14px;
-        margin-bottom: 8px;
+    .agent-title {
+        font-family: 'Bungee', monospace;
+        font-size: 13px;
         display: flex;
-        align-items: center;
         justify-content: space-between;
+        align-items: center;
+        margin-bottom: 8px;
     }
-    .agent-crt {
-        background-color: #1b261c;
-        border: 2px solid #334;
-        border-radius: 6px;
+    .agent-screen {
+        background-color: #1a2419;
+        color: #4af626;
+        border: 2px solid #333;
+        border-radius: 4px;
         padding: 8px 12px;
-        color: #5af75a;
         font-size: 12px;
-        min-height: 55px;
-        box-shadow: inset 0 0 8px rgba(0,0,0,0.8);
+        min-height: 50px;
+        box-shadow: inset 0 0 6px rgba(0,0,0,0.8);
     }
 
-    .badge-active { background: #2e7d32; color: #fff; padding: 2px 6px; border-radius: 4px; font-size: 10px; }
-    .badge-idle { background: #757575; color: #fff; padding: 2px 6px; border-radius: 4px; font-size: 10px; }
+    .badge-idle { background-color: #616161; color: white; padding: 2px 6px; border-radius: 3px; font-size: 10px; }
+    .badge-active { background-color: #2e7d32; color: white; padding: 2px 6px; border-radius: 3px; font-size: 10px; }
 
-    .finding-card {
+    /* Audit Finding Cards */
+    .vuln-card {
         background: #ffffff;
         border: 2px solid #222;
-        border-radius: 8px;
+        border-radius: 6px;
         padding: 16px;
-        margin-bottom: 20px;
-        box-shadow: 4px 4px 0px #222;
+        margin-bottom: 16px;
+        box-shadow: 3px 3px 0px #333;
     }
-    .threat-section {
-        background-color: #fff3f3;
-        border-left: 4px solid #d32f2f;
-        padding: 10px 14px;
-        margin: 10px 0;
-        border-radius: 0 4px 4px 0;
-    }
-    .defense-section {
-        background-color: #f1f8e9;
-        border-left: 4px solid #2e7d32;
-        padding: 10px 14px;
-        margin: 10px 0;
-        border-radius: 0 4px 4px 0;
-    }
-    .cmd-box {
-        background: #1b1e24;
-        color: #4af626;
-        padding: 10px;
+    .vuln-card.high { border-left: 8px solid #c62828; }
+    .vuln-card.medium { border-left: 8px solid #ef6c00; }
+    .vuln-card.low { border-left: 8px solid #1565c0; }
+
+    .evidence-block {
+        background-color: #fffde7;
+        border: 1px dashed #fbc02d;
+        padding: 8px 12px;
         border-radius: 4px;
-        font-family: 'Share Tech Mono', monospace;
+        margin: 8px 0;
+        font-size: 13px;
+    }
+    .remediation-block {
+        background-color: #e8f5e9;
+        border: 1px solid #81c784;
+        padding: 10px 14px;
+        border-radius: 4px;
+        margin-top: 8px;
+    }
+    .code-snippet {
+        background: #21252b;
+        color: #98c379;
+        padding: 8px 12px;
+        border-radius: 4px;
         font-size: 12px;
         overflow-x: auto;
     }
 </style>
 """, unsafe_allow_html=True)
 
-# ----------------- RECON & SCANNING ENGINE -----------------
+# ----------------- RECON & DETERMINISTIC AUDIT ENGINE -----------------
 
 def get_base_domain(host: str) -> str:
+    """Extracts base registered domain to manage subdomain inclusion bounds."""
     parts = host.split('.')
     return ".".join(parts[-2:]) if len(parts) > 2 else host
 
-def run_deep_crawl(start_url: str, max_pages: int = 10, allow_subdomains: bool = True):
-    parsed_start = urlparse(start_url)
-    root_domain = get_base_domain(parsed_start.netloc)
-    visited_pages = set()
+def execute_deterministic_crawl(start_url: str, max_pages: int = 10, scan_subdomains: bool = True):
+    """
+    Traverses routes within authorized domain scope and captures response telemetry.
+    """
+    root_parsed = urlparse(start_url)
+    root_domain = get_base_domain(root_parsed.netloc)
+    visited = set()
     queue = deque([start_url])
-    crawl_records = []
+    records = []
 
-    req_headers = {"User-Agent": "CRTSquad-SecurityAuditor/3.0"}
+    headers = {"User-Agent": "CRTSquad-DefensiveAuditor/4.0 (Non-Offensive Security Scanner)"}
 
-    while queue and len(visited_pages) < max_pages:
-        current_url = queue.popleft()
-        if current_url in visited_pages:
+    while queue and len(visited) < max_pages:
+        target = queue.popleft()
+        if target in visited:
             continue
-        visited_pages.add(current_url)
+        visited.add(target)
 
         try:
-            resp = requests.get(current_url, headers=req_headers, timeout=6, allow_redirects=True)
-            headers = dict(resp.headers)
-            content_type = headers.get("Content-Type", "")
-            discovered_forms = []
-            new_links = []
+            start_time = time.time()
+            resp = requests.get(target, headers=headers, timeout=6, allow_redirects=True)
+            latency_ms = round((time.time() - start_time) * 1000, 2)
+
+            resp_headers = dict(resp.headers)
+            content_type = resp_headers.get("Content-Type", "")
+            forms = []
+            discovered_links = []
 
             if "text/html" in content_type:
                 soup = BeautifulSoup(resp.text, "html.parser")
-                for f_idx, form in enumerate(soup.find_all("form")):
-                    discovered_forms.append({
-                        "index": f_idx + 1,
-                        "action": urljoin(current_url, form.get("action", "")),
-                        "method": form.get("method", "GET").upper(),
-                        "inputs": [inp.get("name", "unnamed") for inp in form.find_all(["input", "textarea", "select"])]
+
+                # Extract forms and field attributes
+                for idx, form_tag in enumerate(soup.find_all("form")):
+                    action = urljoin(target, form_tag.get("action", ""))
+                    method = form_tag.get("method", "GET").upper()
+                    inputs = []
+                    for input_tag in form_tag.find_all(["input", "textarea", "select"]):
+                        inputs.append({
+                            "name": input_tag.get("name", "unnamed"),
+                            "type": input_tag.get("type", "text"),
+                            "id": input_tag.get("id", "")
+                        })
+                    forms.append({
+                        "id": idx + 1,
+                        "action": action,
+                        "method": method,
+                        "inputs": inputs
                     })
 
-                for tag in soup.find_all("a", href=True):
-                    full_url = urljoin(current_url, tag['href'].strip())
-                    link_domain = urlparse(full_url).netloc
-                    is_in_scope = (link_domain == root_domain or link_domain.endswith(f".{root_domain}")) if allow_subdomains else (link_domain == parsed_start.netloc)
-                    if is_in_scope and full_url not in visited_pages and full_url not in queue:
-                        new_links.append(full_url)
-                        queue.append(full_url)
+                # Link extraction with scope validation
+                for anchor in soup.find_all("a", href=True):
+                    resolved = urljoin(target, anchor['href'].strip())
+                    link_parsed = urlparse(resolved)
 
-            crawl_records.append({
-                "url": current_url,
-                "status_code": resp.status_code,
-                "headers": headers,
-                "forms": discovered_forms,
-                "links_found": len(new_links),
+                    # Normalize out anchors and query parameters for crawling queue
+                    clean_url = f"{link_parsed.scheme}://{link_parsed.netloc}{link_parsed.path}"
+                    link_domain = link_parsed.netloc
+
+                    is_scoped = False
+                    if scan_subdomains:
+                        is_scoped = link_domain == root_domain or link_domain.endswith(f".{root_domain}")
+                    else:
+                        is_scoped = link_domain == root_parsed.netloc
+
+                    if is_scoped and clean_url not in visited and clean_url not in queue:
+                        if resolved.startswith(("http://", "https://")):
+                            discovered_links.append(resolved)
+                            queue.append(clean_url)
+
+            records.append({
+                "url": target,
+                "status": resp.status_code,
+                "latency_ms": latency_ms,
+                "headers": resp_headers,
+                "cookies": resp.cookies.get_dict(),
+                "forms": forms,
+                "outbound_links": len(discovered_links),
                 "error": None
             })
-        except Exception as err:
-            crawl_records.append({
-                "url": current_url,
-                "status_code": "ERR",
+
+        except Exception as ex:
+            records.append({
+                "url": target,
+                "status": "ERR",
+                "latency_ms": 0,
                 "headers": {},
+                "cookies": {},
                 "forms": [],
-                "links_found": 0,
-                "error": str(err)
+                "outbound_links": 0,
+                "error": str(ex)
             })
 
-    return crawl_records
+    return records
 
-def audit_page_vulnerabilities(page_record: dict) -> list:
-    url = page_record["url"]
-    headers = page_record["headers"]
-    forms = page_record["forms"]
+def audit_page_vulnerabilities(record: dict) -> list:
+    """
+    Applies deterministic security rules to detect standard misconfigurations
+    and security posture weaknesses without offensive exploitation.
+    """
+    url = record["url"]
+    headers = {k.lower(): v for k, v in record["headers"].items()}
+    forms = record["forms"]
     issues = []
 
-    # 1. Cleartext Transmission
+    # 1. Transport Layer Security (OWASP A02:2021 / CWE-319)
     if url.startswith("http://"):
         issues.append({
-            "category": "OWASP A02:2021 - Cryptographic Failures",
-            "title": "Cleartext HTTP Protocol in Use",
+            "owasp": "A02:2021 - Cryptographic Failures",
+            "cwe": "CWE-319: Cleartext Transmission of Sensitive Information",
             "severity": "High",
-            "location": url,
-            "evidence": "Endpoint served without Transport Layer Security (TLS).",
-            "threat_model": {
-                "mindset": "Adversaries targeting local or transit networks monitor unencrypted traffic to capture session tokens, credentials, and sensitive transaction parameters.",
-                "vector": "Adversary performs Man-in-the-Middle (MitM) inspection or ARP cache poisoning on shared networks (e.g., untrusted Wi-Fi) to intercept raw traffic.",
-                "verification_cmd": f"curl -I -s -X GET \"{url}\" | grep -i \"HTTP/\""
-            },
-            "defense": {
-                "concept": "Enforce mandatory TLS encryption across all endpoints and redirect all insecure port 80 requests to port 443.",
-                "steps": [
-                    "Obtain and install a valid TLS certificate (e.g., via Let's Encrypt).",
-                    "Configure 301 permanent redirects from HTTP to HTTPS.",
-                    "Verify cipher suites disable legacy algorithms (SSLv3, TLS 1.0, TLS 1.1)."
-                ],
-                "commands": """# Nginx Redirection Block:
-server {
+            "component": url,
+            "evidence": f"Endpoint serves content over unencrypted HTTP protocol.",
+            "impact": "Network observers can intercept, view, and alter traffic in transit.",
+            "fix": "Redirect all port 80 traffic to port 443 with a 301 Permanent Redirect.",
+            "config": """server {
     listen 80;
     server_name example.com *.example.com;
     return 301 https://$host$request_uri;
 }"""
-            }
         })
 
-    # 2. Missing Strict-Transport-Security (HSTS)
-    if "strict-transport-security" not in [h.lower() for h in headers.keys()]:
+    # 2. Strict Transport Security (HSTS - RFC 6797 / CWE-523)
+    if "strict-transport-security" not in headers:
         issues.append({
-            "category": "OWASP A05:2021 - Security Misconfiguration",
-            "title": "Missing Strict-Transport-Security (HSTS)",
+            "owasp": "A05:2021 - Security Misconfiguration",
+            "cwe": "CWE-523: Unprotected Transport Sports",
             "severity": "High",
-            "location": f"Header at {url}",
-            "evidence": "Strict-Transport-Security header omitted from HTTP response.",
-            "threat_model": {
-                "mindset": "Attackers exploit user tendencies to enter domain names without protocols, intercepting initial requests before secure upgrades occur.",
-                "vector": "SSL stripping tools manipulate unencrypted initial requests, intercepting client traffic while proxying HTTPS to the upstream server.",
-                "verification_cmd": f"curl -s -I \"{url}\" | grep -i \"Strict-Transport-Security\""
-            },
-            "defense": {
-                "concept": "Instruct user agents to refuse unencrypted connections for the specified domain and all associated subdomains.",
-                "steps": [
-                    "Set max-age to at least 1 year (31536000 seconds).",
-                    "Include the includeSubDomains directive.",
-                    "Submit the domain to the Chromium HSTS preload list."
-                ],
-                "commands": """# Nginx:
-add_header Strict-Transport-Security "max-age=63072000; includeSubDomains; preload" always;
-
-# Apache (.htaccess or httpd.conf):
-Header always set Strict-Transport-Security "max-age=63072000; includeSubDomains; preload" """
-            }
+            "component": f"Header on {url}",
+            "evidence": "Strict-Transport-Security header was omitted from the server response.",
+            "impact": "Clients may initiate the first connection unencrypted, leaving users vulnerable to SSL-stripping.",
+            "fix": "Enforce HSTS across the primary domain and all subdomains for at least 1 year.",
+            "config": "add_header Strict-Transport-Security \"max-age=31536000; includeSubDomains; preload\" always;"
         })
 
-    # 3. Missing Content-Security-Policy (CSP)
-    if "content-security-policy" not in [h.lower() for h in headers.keys()]:
+    # 3. Content Security Policy (W3C CSP / CWE-1021 / CWE-79)
+    if "content-security-policy" not in headers:
         issues.append({
-            "category": "OWASP A03:2021 - Injection (XSS Vector)",
-            "title": "Missing Content-Security-Policy (CSP)",
+            "owasp": "A05:2021 - Security Misconfiguration",
+            "cwe": "CWE-1021: Improper Restriction of Rendered UI Layers",
             "severity": "Medium",
-            "location": f"Header at {url}",
-            "evidence": "No Content-Security-Policy header defined.",
-            "threat_model": {
-                "mindset": "Adversaries identifying user input reflection or third-party script vulnerabilities rely on the browser's default execution permissions to load unauthorized JavaScript.",
-                "vector": "Injecting malicious scripts or inline event handlers that can execute freely, access storage mechanisms, or exfiltrate tokens without origin restrictions.",
-                "verification_cmd": f"curl -s -I \"{url}\" | grep -i \"Content-Security-Policy\""
-            },
-            "defense": {
-                "concept": "Establish a whitelist of authorized script, image, and resource origins, restricting unauthorized script execution.",
-                "steps": [
-                    "Deploy default-src 'self' to restrict resources to the primary origin by default.",
-                    "Use cryptographically random nonces (nonce-...) for inline scripts instead of 'unsafe-inline'.",
-                    "Deploy the policy in report-only mode initially to audit compatibility."
-                ],
-                "commands": """# Nginx Directive:
-add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self'; object-src 'none'; frame-ancestors 'none';" always;"""
-            }
+            "component": f"Header on {url}",
+            "evidence": "No Content-Security-Policy (CSP) header defined.",
+            "impact": "Absence of resource origin restrictions increases vulnerability to Cross-Site Scripting (XSS) and framing attacks.",
+            "fix": "Define a restrictive Content-Security-Policy disallowing untrusted third-party scripts and disallowing frame embedding.",
+            "config": "add_header Content-Security-Policy \"default-src 'self'; script-src 'self'; frame-ancestors 'none'; object-src 'none';\" always;"
         })
 
-    # 4. Insecure Form Method with Sensitive Inputs
+    # 4. MIME-Type Sniffing Protection (RFC 7231 / CWE-79)
+    if headers.get("x-content-type-options", "").lower() != "nosniff":
+        issues.append({
+            "owasp": "A05:2021 - Security Misconfiguration",
+            "cwe": "CWE-79: Improper Neutralization of Input During Web Page Generation",
+            "severity": "Low",
+            "component": f"Header on {url}",
+            "evidence": f"X-Content-Type-Options is missing or not set to 'nosniff' (Observed: '{headers.get('x-content-type-options', 'None')}').",
+            "impact": "Browsers may execute non-executable files if they infer the MIME type differs from the declared header.",
+            "fix": "Instruct browsers to strictly adhere to declared MIME types.",
+            "config": "add_header X-Content-Type-Options \"nosniff\" always;"
+        })
+
+    # 5. Form Credential Handling (OWASP A04:2021 / CWE-598)
     for form in forms:
-        input_names = [str(inp).lower() for inp in form["inputs"]]
-        sensitive_keywords = ["pass", "password", "token", "secret", "cvv", "key", "auth"]
-        if form["method"] == "GET" and any(k in " ".join(input_names) for k in sensitive_keywords):
+        inputs = [str(item["name"]).lower() for item in form["inputs"]]
+        cred_fields = [f for f in inputs if any(k in f for k in ["pass", "token", "key", "secret", "cvv"])]
+        
+        if form["method"] == "GET" and cred_fields:
             issues.append({
-                "category": "OWASP A04:2021 - Insecure Design",
-                "title": "Sensitive Parameters Exposed via GET Method",
+                "owasp": "A04:2021 - Insecure Design",
+                "cwe": "CWE-598: Use of GET Request Method With Sensitive Query Strings",
                 "severity": "High",
-                "location": f"Form #{form['index']} at {url} (action: {form['action']})",
-                "evidence": f"Form processes sensitive fields using HTTP GET: {', '.join(form['inputs'])}",
-                "threat_model": {
-                    "mindset": "Adversaries target persistent logs and peripheral channels where query strings are routinely recorded without encryption.",
-                    "vector": "Parameters sent via GET persist in browser histories, web proxy access logs, and upstream Referer headers when loading off-site assets.",
-                    "verification_cmd": f"grep -inE 'method=[\"\\']get[\"\\']' page_dump.html"
-                },
-                "defense": {
-                    "concept": "Transmit authentication and credential payloads strictly inside the encrypted body of HTTP POST requests.",
-                    "steps": [
-                        "Update the form tag attribute method='POST'.",
-                        "Ensure endpoint controllers only accept POST/PUT verbs for credential handling.",
-                        "Set Cache-Control: no-store on forms handling authentication."
-                    ],
-                    "commands": """<!-- Remediated HTML Pattern -->
+                "component": f"Form #{form['id']} on {url} (action: '{form['action']}')",
+                "evidence": f"Form accepts sensitive field(s) {cred_fields} but transmits via HTTP GET.",
+                "impact": "Credentials are appended to URLs and get permanently stored in proxy logs, browser histories, and Referer headers.",
+                "fix": "Change form transmission method to POST and handle authorization tokens in secure request bodies.",
+                "config": """<!-- Compliant Form Specification -->
 <form action="/login" method="POST" autocomplete="off">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
     <input type="password" name="password" required />
     <button type="submit">Sign In</button>
 </form>"""
-                }
             })
 
     return issues
 
 # ----------------- UI INTERFACE -----------------
 
-st.title("🖥️ CRT CYBER SQUAD — VAPT CONSOLE")
-st.caption("Deep Crawling, Threat Vector Analysis, and Defensive Hardening")
+st.title("🖥️ CRT CYBER SQUAD — VAPT AUDIT CONSOLE")
+st.caption("Non-Offensive, Evidence-Grounded Security Posture & Vulnerability Assessment Platform")
 
 with st.sidebar:
-    st.header("⚙️ Scanner Control")
-    target_input = st.text_input("Target Root URL:", value="https://example.com")
-    max_pages = st.slider("Max Pages to Crawl:", min_value=3, max_value=25, value=8)
-    include_subdomains = st.checkbox("Include Subdomains", value=True)
-    start_btn = st.button("🚀 Run Assessment", type="primary", use_container_width=True)
+    st.header("⚙️ Audit Parameters")
+    target_url = st.text_input("Target Root URL:", value="https://example.com")
+    crawl_limit = st.slider("Max Crawl Depth (Pages):", min_value=3, max_value=25, value=8)
+    include_subdomains = st.checkbox("Audit Subdomains", value=True)
+    launch_btn = st.button("🚀 Run Vulnerability Audit", type="primary", use_container_width=True)
 
-# 2x2 Agent Status Display
-agent_grid_placeholder = st.empty()
+# 2x2 Agent HUD Console
+agent_hud = st.empty()
 
-def update_agent_ui(states):
+def render_agent_hud(agents):
     html = f"""
     <div class="agent-grid">
-        <div class="agent-cell">
-            <div class="agent-header"><span>[AGENT 1] CRT ROVER</span><span class="{states['rover']['b']}">{states['rover']['s']}</span></div>
-            <div class="agent-crt">{states['rover']['m']}</div>
+        <div class="agent-card">
+            <div class="agent-title">
+                <span>[AGENT 1] RECON ROVER</span>
+                <span class="{agents['rover']['badge']}">{agents['rover']['status']}</span>
+            </div>
+            <div class="agent-screen">{agents['rover']['msg']}</div>
         </div>
-        <div class="agent-cell">
-            <div class="agent-header"><span>[AGENT 2] CRT PROBE</span><span class="{states['probe']['b']}">{states['probe']['s']}</span></div>
-            <div class="agent-crt">{states['probe']['m']}</div>
+        <div class="agent-card">
+            <div class="agent-title">
+                <span>[AGENT 2] ARCHITECTURE AUDITOR</span>
+                <span class="{agents['auditor']['badge']}">{agents['auditor']['status']}</span>
+            </div>
+            <div class="agent-screen">{agents['auditor']['msg']}</div>
         </div>
-        <div class="agent-cell">
-            <div class="agent-header"><span>[AGENT 3] CRT VERIFIER</span><span class="{states['verifier']['b']}">{states['verifier']['s']}</span></div>
-            <div class="agent-crt">{states['verifier']['m']}</div>
+        <div class="agent-card">
+            <div class="agent-title">
+                <span>[AGENT 3] INPUT INSPECTOR</span>
+                <span class="{agents['inspector']['badge']}">{agents['inspector']['status']}</span>
+            </div>
+            <div class="agent-screen">{agents['inspector']['msg']}</div>
         </div>
-        <div class="agent-cell">
-            <div class="agent-header"><span>[AGENT 4] CRT COUNSELOR</span><span class="{states['counselor']['b']}">{states['counselor']['s']}</span></div>
-            <div class="agent-crt">{states['counselor']['m']}</div>
+        <div class="agent-card">
+            <div class="agent-title">
+                <span>[AGENT 4] REMEDIATION COUNSELOR</span>
+                <span class="{agents['counselor']['badge']}">{agents['counselor']['status']}</span>
+            </div>
+            <div class="agent-screen">{agents['counselor']['msg']}</div>
         </div>
     </div>
     """
-    agent_grid_placeholder.markdown(html, unsafe_allow_html=True)
+    agent_hud.markdown(html, unsafe_allow_html=True)
 
-states = {
-    "rover": {"s": "IDLE", "b": "badge-idle", "m": "Waiting for target specification..."},
-    "probe": {"s": "IDLE", "b": "badge-idle", "m": "Passive rule engine loaded."},
-    "verifier": {"s": "IDLE", "b": "badge-idle", "m": "Zero-hallucination verification active."},
-    "counselor": {"s": "IDLE", "b": "badge-idle", "m": "Defensive mitigation templates ready."}
+agents = {
+    "rover": {"status": "STANDBY", "badge": "badge-idle", "msg": "Awaiting scope parameters..."},
+    "auditor": {"status": "STANDBY", "badge": "badge-idle", "msg": "Protocol & header rules ready."},
+    "inspector": {"status": "STANDBY", "badge": "badge-idle", "msg": "Form schema analyzer armed."},
+    "counselor": {"status": "STANDBY", "badge": "badge-idle", "msg": "CWE remediation repository loaded."}
 }
-update_agent_ui(states)
+render_agent_hud(agents)
 
-if start_btn:
-    if not target_input.startswith(("http://", "https://")):
-        st.error("Please provide a valid protocol prefix (http:// or https://)")
+if launch_btn:
+    if not target_url.startswith(("http://", "https://")):
+        st.error("Please supply a valid URL scheme (e.g., https://example.com)")
     else:
-        # Phase 1: Reconnaissance
-        states["rover"] = {"s": "SCANNING", "b": "badge-active", "m": f"Traversing subdomains and paths across {target_input}..."}
-        update_agent_ui(states)
-        crawl_results = run_deep_crawl(target_input, max_pages=max_pages, allow_subdomains=include_subdomains)
+        # Step 1: Recon & Crawling
+        agents["rover"] = {"status": "CRAWLING", "badge": "badge-active", "msg": f"Traversing routes & subdomains across {target_url}..."}
+        render_agent_hud(agents)
+        
+        crawl_data = execute_deterministic_crawl(target_url, max_pages=crawl_limit, scan_subdomains=include_subdomains)
+        
+        agents["rover"] = {"status": "COMPLETE", "badge": "badge-active", "msg": f"Indexed {len(crawl_data)} scoped endpoints."}
+        agents["auditor"] = {"status": "AUDITING", "badge": "badge-active", "msg": "Verifying transport layers and HTTP response headers..."}
+        agents["inspector"] = {"status": "AUDITING", "badge": "badge-active", "msg": "Inspecting HTML forms and input validation semantics..."}
+        render_agent_hud(agents)
 
-        # Phase 2 & 3: Audit & Verification
-        states["rover"] = {"s": "DONE", "b": "badge-active", "m": f"Discovered {len(crawl_results)} pages and endpoints."}
-        states["probe"] = {"s": "AUDITING", "b": "badge-active", "m": "Evaluating headers, inputs, and form methods..."}
-        update_agent_ui(states)
-
+        # Step 2: Assessment
         all_findings = []
-        for page in crawl_results:
-            if not page["error"]:
-                all_findings.extend(audit_page_vulnerabilities(page))
+        for record in crawl_data:
+            if not record["error"]:
+                all_findings.extend(audit_page_vulnerabilities(record))
 
-        states["probe"] = {"s": "DONE", "b": "badge-active", "m": "Surface audit complete."}
-        states["verifier"] = {"s": "VERIFYING", "b": "badge-active", "m": f"Validated {len(all_findings)} deterministic issues."}
-        states["counselor"] = {"s": "DONE", "b": "badge-active", "m": "Remediation workflows generated."}
-        update_agent_ui(states)
+        agents["auditor"] = {"status": "COMPLETE", "badge": "badge-active", "msg": "Cryptographic and configuration analysis completed."}
+        agents["inspector"] = {"status": "COMPLETE", "badge": "badge-active", "msg": "Input parameters analyzed against CWE-598."}
+        agents["counselor"] = {"status": "COMPLETE", "badge": "badge-active", "msg": f"Mapped {len(all_findings)} issues to verified remediations."}
+        render_agent_hud(agents)
 
         st.markdown("---")
 
-        # Table: Crawled Pages
-        st.subheader("📑 1. Discovered Endpoints & Scope Summary")
-        table_rows = [
-            {
-                "Target Endpoint": r["url"],
-                "HTTP Status": str(r["status_code"]),
-                "Forms Detected": len(r["forms"]),
-                "Outbound Links": r["links_found"]
-            }
-            for r in crawl_results
-        ]
-        st.dataframe(table_rows, use_container_width=True)
+        # ----------------- SECTION 1: CRAWL & TELEMETRY LEDGER -----------------
+        st.subheader("📑 1. Crawl Scope & Endpoint Telemetry")
+        st.caption("Deterministic breakdown of each crawled resource, response latency, and discovered assets:")
 
-        # Detailed Security Findings
-        st.subheader("🛡️ 2. Detailed Threat Analysis & Defensive Remediation")
+        ledger_rows = []
+        for r in crawl_data:
+            ledger_rows.append({
+                "Target Endpoint": r["url"],
+                "HTTP Status": str(r["status"]),
+                "Latency": f"{r['latency_ms']} ms",
+                "Forms Detected": len(r["forms"]),
+                "Outbound Links": r["outbound_links"]
+            })
+        st.dataframe(ledger_rows, use_container_width=True)
+
+        # ----------------- SECTION 2: VULNERABILITY AUDIT -----------------
+        st.subheader("🛡️ 2. Identified Vulnerabilities & Hardening Guidelines")
+        st.caption("Every finding is substantiated with exact server telemetry and direct remediation blocks.")
 
         if not all_findings:
-            st.success("No surface vulnerabilities detected based on current passive rules.")
+            st.success("Audit complete: No security misconfigurations or architectural weaknesses identified under current rules.")
         else:
             for item in all_findings:
-                tm = item["threat_model"]
-                df = item["defense"]
-
+                sev_lower = item["severity"].lower()
                 st.markdown(f"""
-                <div class="finding-card">
-                    <span style="font-size:11px; font-weight:bold; color:#777;">{item['category']}</span>
-                    <h3 style="margin: 4px 0 8px 0;">{item['title']} <span style="font-size:12px; color:#d32f2f;">[{item['severity']} Severity]</span></h3>
-                    <p><b>Target Component:</b> <code>{item['location']}</code></p>
-                    <p><b>Evidence:</b> {item['evidence']}</p>
-
-                    <!-- SECTION A: THREAT MODEL & EXPLOITATION MECHANICS -->
-                    <div class="threat-section">
-                        <h4 style="margin: 0 0 6px 0; color: #b71c1c;">⚠️ Adversary Threat Model & Mechanics</h4>
-                        <p style="margin: 2px 0;"><b>Attacker Mindset:</b> {tm['mindset']}</p>
-                        <p style="margin: 2px 0;"><b>Attack Vector:</b> {tm['vector']}</p>
-                        <p style="margin: 6px 0 2px 0;"><b>Diagnostic Verification Command:</b></p>
-                        <div class="cmd-box">{tm['verification_cmd']}</div>
+                <div class="vuln-card {sev_lower}">
+                    <span style="font-size:11px; font-weight:bold; color:#555;">{item['owasp']} | {item['cwe']}</span>
+                    <h3 style="margin: 4px 0 8px 0;">{item['cwe'].split(':')[1] if ':' in item['cwe'] else item['cwe']} 
+                        <span style="font-size:12px; text-transform:uppercase;">[{item['severity']} Severity]</span>
+                    </h3>
+                    <p style="margin:2px 0;"><b>Affected Component:</b> <code>{item['component']}</code></p>
+                    <div class="evidence-block">
+                        <b>Deterministic Evidence:</b> {item['evidence']}
                     </div>
-
-                    <!-- SECTION B: DEFENSIVE HARDENING & REMEDIATION -->
-                    <div class="defense-section">
-                        <h4 style="margin: 0 0 6px 0; color: #1b5e20;">🛡️ Defensive Hardening & Implementation Steps</h4>
-                        <p style="margin: 2px 0;"><b>Security Concept:</b> {df['concept']}</p>
-                        <p style="margin: 6px 0 2px 0;"><b>Required Remediation Steps:</b></p>
-                        <ul style="margin: 2px 0 6px 20px;">
-                            {''.join(f'<li>{step}</li>' for step in df['steps'])}
-                        </ul>
-                        <p style="margin: 6px 0 2px 0;"><b>Configuration / Patch Implementation:</b></p>
-                        <pre class="cmd-box">{df['commands']}</pre>
+                    <p style="margin:4px 0;"><b>Security Impact:</b> {item['impact']}</p>
+                    <div class="remediation-block">
+                        <b>Remediation Directive:</b> {item['fix']}
+                        <div style="margin-top:6px;">
+                            <b>Hardening Reference:</b>
+                            <pre class="code-snippet">{item['config']}</pre>
+                        </div>
                     </div>
                 </div>
                 """, unsafe_allow_html=True)
